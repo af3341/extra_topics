@@ -1,0 +1,108 @@
+---
+title: "statistical_learning"
+author: "Alana Ferris"
+date: "2022-12-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(glmnet)
+set.seed(11)
+
+```
+
+# reading in the data
+
+```{r}
+bwt_df = 
+  read_csv("./extra_topic_data/birthweight.csv") %>% 
+  janitor::clean_names() %>%
+  mutate(
+    babysex = as.factor(babysex),
+    babysex = fct_recode(babysex, "male" = "1", "female" = "2"),
+    frace = as.factor(frace),
+    frace = fct_recode(frace, "white" = "1", "black" = "2", "asian" = "3", 
+                       "puerto rican" = "4", "other" = "8"),
+    malform = as.logical(malform),
+    mrace = as.factor(mrace),
+    mrace = fct_recode(mrace, "white" = "1", "black" = "2", "asian" = "3", 
+                       "puerto rican" = "4")) %>% 
+  sample_n(200)
+```
+- inputs and outputs of glmnet package is messy 
+- expects you to get outcome y with a design matrix ..? 
+
+```{r}
+x = model.matrix(bwt ~ ., bwt_df) [,-1] # here we are pulling this matrix out bc thats what lasso expects
+y = bwt_df$bwt
+```
+
+Fit lasso
+
+```{r}
+lambda = 10^(seq(3, -2, -0.1)) #lambda balances residual sum of squares and something else, if don't define it the system will do it for you 
+
+lasso_fit =
+  glmnet(x, y, lambda = lambda) #lasso wants to know the design matrix and the outcome factor 
+# as lambda becomes smaller more things included in the model 
+
+lasso_cv =
+  cv.glmnet(x, y, lambda = lambda) # to pick the best lambda, what gives best prediction accuracy given prdictors and outcome i care about 
+
+lambda_opt = lasso_cv$lambda.min # this will bring out optimal lambda value brought about by cv
+
+
+```
+- if want to choose the right lambda, need to do cross validation, but `cv.glmnet` will do that for you 
+
+## this is the plot you see for lasso 
+
+```{r}
+broom::tidy(lasso_fit) %>% 
+  select(term, lambda, estimate) %>% 
+  complete(term, lambda, fill = list(estimate = 0) ) %>% 
+  filter(term != "(Intercept)") %>% 
+  ggplot(aes(x = log(lambda, 10), y = estimate, group = term, color = term)) + 
+  geom_path() + 
+  geom_vline(xintercept = log(lambda_opt, 10), color = "blue", size = 1.2) +
+  theme(legend.position = "none")
+```
+- each of these lines are the different coefficients changing as lambda gets bigger
+- eventually lambda so big coefficients reach zero (nothing in the output) -- the penalty outweighs residual sum of squares 
+- vertical line shows where optimal lambda came from 
+- for this tuning parameter these coefficients give you best predictions 
+
+# clustering 
+
+```{r}
+poke_df = 
+  read_csv("./extra_topic_data/pokemon.csv") %>% 
+  janitor::clean_names() %>% 
+  select(hp, speed)
+
+poke_df %>% 
+  ggplot(aes(x = hp, y = speed)) + 
+  geom_point()
+```
+- don't see obvious clusters in the data set but we can look in a data driven way 
+
+## run k means
+
+```{r}
+kmeans_fit =
+  kmeans(x = poke_df, centers = 3)
+```
+- telling it here is the pokemon dataframe and i want 3 means aka 3 groups out of this aka 3 clusters
+
+```{r}
+poke_df =
+  broom::augment(kmeans_fit, poke_df) #broom::augment takes k means fitting process and adding cluster assignment to original dataset 
+
+poke_df %>% 
+  ggplot(aes(x = hp, y = speed, color = .cluster)) + #color now coming from cluster assignment
+  geom_point()
+```
+- clustering a lot of the time is a first stage analysis when trying to figure out whats going on 
+
+NO HOMEWORK 7 
